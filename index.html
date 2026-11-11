@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Programación de Grupos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#06090f; --panel:#0c121c; --card:#0e1520; --card2:#111a27; --line:#1c2738;
+    --amber:#ffc22e; --text:#e9eef6; --muted:#7d8aa0; --soft:#c3cbd8; --blue:#4aa8ff; --red:#ff4d4d;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;
+    font-family:"Barlow Condensed","Arial Narrow",Arial,sans-serif}
+  .mono{font-family:"JetBrains Mono",Consolas,"Courier New",monospace}
+  #app{position:fixed;inset:0;display:flex;flex-direction:column}
+
+  /* encabezado */
+  header{display:flex;align-items:center;gap:2vw;padding:1.6vh 2.2vw;background:linear-gradient(#111a28,#0a0f18);border-bottom:.4vh solid var(--amber)}
+  .icono{width:7vh;height:7vh;border-radius:1vh;background:var(--amber);display:grid;place-items:center;flex:none}
+  .icono svg{width:4.6vh;height:4.6vh}
+  .titulos{flex:1;min-width:0}
+  .titulos h1{font-size:5.2vh;font-weight:700;letter-spacing:.12vw;line-height:1;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .titulos p{font-size:2.5vh;color:var(--muted);margin-top:.5vh;text-transform:uppercase;letter-spacing:.1vw;display:flex;gap:1vw;align-items:center}
+  .alerta{background:var(--red);color:#fff;padding:.2vh .7vw;border-radius:.4vh;font-weight:700;letter-spacing:.08vw}
+  .reloj{text-align:right}
+  .reloj .hora{font-size:7.2vh;font-weight:700;color:var(--amber);line-height:1}
+  .reloj .fecha{font-size:2.4vh;color:var(--muted);text-transform:uppercase;letter-spacing:.1vw}
+
+  /* resumen */
+  .resumen{display:flex;gap:1vw;padding:1.1vh 2.2vw;background:var(--panel);border-bottom:1px solid var(--line)}
+  .chip{display:flex;align-items:center;gap:.7vw;padding:.6vh 1.2vw;border-radius:.6vh;background:#121b2a;font-size:2.4vh;font-weight:600;letter-spacing:.1vw;color:var(--soft)}
+  .chip b{font-family:"JetBrains Mono",Consolas,monospace;font-size:2.7vh;color:var(--amber)}
+  .pagina{margin-left:auto;align-self:center;font-size:2.4vh;color:var(--muted);letter-spacing:.1vw}
+
+  /* tarjetas de grupo */
+  #grupos{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:1.4vh 1.2vw;padding:1.4vh 1.6vw;min-height:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:1vh;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+  .card-h{display:flex;align-items:center;gap:1vw;padding:1vh 1.1vw;background:var(--card2);border-bottom:1px solid var(--line)}
+  .gtag{flex:none;background:var(--amber);color:#111;font-weight:700;font-size:3.2vh;letter-spacing:.1vw;padding:.3vh .9vw;border-radius:.5vh;text-transform:uppercase}
+  .destino{flex:1;min-width:0;display:flex;align-items:center;gap:.5vw;font-size:3vh;font-weight:600;text-transform:uppercase;letter-spacing:.05vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .destino svg{flex:none;width:2.6vh;height:2.6vh}
+  .card-b{flex:1;display:grid;grid-template-columns:42% 1fr;min-height:0;font-size:var(--f,2.7vh)}
+  .col{padding:1vh 1.1vw;overflow:hidden;min-height:0}
+  .col + .col{border-left:1px solid var(--line)}
+  .lbl{font-size:.72em;color:var(--amber);letter-spacing:.15vw;font-weight:700;margin-bottom:.5vh}
+  .veh{display:inline-flex;align-items:center;gap:.4vw;margin:.5vh 0 .2vh;padding:.1vh .6vw;border-radius:.4vh;background:#1b2840;color:#cfe3ff;font-family:"JetBrains Mono",Consolas,monospace;font-size:.78em;font-weight:700}
+  .veh svg{width:1em;height:1em}
+  .per{color:var(--soft);font-weight:500;line-height:1.18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase}
+  .act{display:flex;gap:.5vw;line-height:1.15;margin-bottom:.45vh;font-weight:600;text-transform:uppercase}
+  .act .n{flex:none;color:var(--amber);font-family:"JetBrains Mono",Consolas,monospace;font-size:.85em;padding-top:.1em;min-width:2.2em}
+  .act.nota{color:var(--muted);font-weight:500;font-style:italic}
+  .vacio{grid-column:1/-1;display:grid;place-items:center;font-size:4vh;color:var(--muted);text-align:center}
+
+  .anim .card{animation:flip .6s cubic-bezier(.2,.8,.3,1) both;transform-origin:top}
+  @keyframes flip{from{transform:rotateX(-90deg);opacity:0}to{transform:none;opacity:1}}
+
+  /* pie */
+  .progreso{height:.5vh;background:#111a28}
+  .progreso div{height:100%;width:0;background:var(--amber)}
+  footer{display:flex;align-items:center;height:6vh;background:var(--amber);color:#111;overflow:hidden}
+  .aviso{flex:none;height:100%;display:flex;align-items:center;padding:0 1.5vw;background:#111;color:var(--amber);font-size:2.6vh;font-weight:700;letter-spacing:.15vw}
+  .cinta{flex:1;overflow:hidden;white-space:nowrap}
+  .cinta span{display:inline-block;padding-left:100%;font-size:3vh;font-weight:700;letter-spacing:.08vw;text-transform:uppercase;animation:correr linear infinite}
+  @keyframes correr{to{transform:translateX(-100%)}}
+  .actualizado{flex:none;padding:0 1.5vw;font-size:2vh;font-weight:600;color:#3a2c00}
+  .actualizado.error{color:#7a0000}
+
+  /* configuración */
+  #setup{position:fixed;inset:0;display:none;place-items:center;background:var(--bg);font-family:Arial,sans-serif;padding:16px}
+  #setup .caja{max-width:720px;width:100%;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:28px}
+  #setup h2{color:var(--amber);font-family:"Barlow Condensed",Arial;font-size:34px;letter-spacing:1px;margin-bottom:10px}
+  #setup li{color:var(--soft);font-size:16px;line-height:1.5}
+  #setup ol{margin:12px 0 18px 20px}
+  #setup input{width:100%;padding:12px;font-size:16px;border-radius:8px;border:1px solid #2b3a52;background:#070b12;color:var(--text)}
+  #setup button{margin-top:12px;padding:12px 18px;font-size:16px;font-weight:bold;border:0;border-radius:8px;background:var(--amber);color:#111;cursor:pointer}
+  #setup .link{margin-top:16px;word-break:break-all;color:var(--amber);font-family:Consolas,monospace;font-size:15px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="icono"><svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
+    <div class="titulos"><h1 id="titulo">Programación de trabajos</h1><p id="subtitulo"></p></div>
+    <div class="reloj"><div class="hora mono" id="hora">--:--</div><div class="fecha" id="fecha"></div></div>
+  </header>
+  <div class="resumen" id="resumen"></div>
+  <div id="grupos"><div class="vacio">Cargando programación…</div></div>
+  <div class="progreso"><div id="barra"></div></div>
+  <footer>
+    <div class="aviso">AVISO</div>
+    <div class="cinta"><span id="mensaje"></span></div>
+    <div class="actualizado" id="actualizado"></div>
+  </footer>
+</div>
+
+<div id="setup"><div class="caja">
+  <h2>CONFIGURAR TABLERO</h2>
+  <ol>
+    <li>Abre tu planilla en Google Sheets.</li>
+    <li>Botón <b>Compartir</b> → Acceso general: <b>Cualquier persona con el enlace</b> → <b>Lector</b>.</li>
+    <li>Copia el enlace de la planilla y pégalo aquí:</li>
+  </ol>
+  <input id="urlHoja" placeholder="https://docs.google.com/spreadsheets/d/...">
+  <button id="btnCrear">Crear link del tablero</button>
+  <div class="link" id="linkFinal"></div>
+</div></div>
+
+<script>
+(function(){
+  /* ================= AJUSTES ================= */
+  const GRUPOS_POR_PAGINA = 4;     // tarjetas por pantalla (2 x 2)
+  const SEGUNDOS_POR_PAGINA = 20;  // si hay más grupos que caben, rotan
+  const MENSAJE = 'Trabaje seguro  •  Use siempre su EPP  •  Bloquee y etiquete antes de intervenir  •  Reporte todo incidente a su supervisor';
+  const SUBTITULO = 'Grupos de trabajo';
+  /* ========================================== */
+
+  const qs = new URLSearchParams(location.search);
+  const ID = (qs.get('id') || '').trim();
+  const HOJA = qs.get('hoja') || '';           // opcional: ?hoja=NombrePestaña (por defecto la primera)
+  const DEMO = qs.has('demo');
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const p2 = n => String(n).padStart(2,'0');
+  const norm = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
+  const DIAS_L = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const ICO_PIN = '<svg viewBox="0 0 24 24" fill="none" stroke="#ffc22e" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+  const ICO_VEH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2-6h11l3 6v4h-2"/><path d="M3 13v4h2"/><circle cx="7.5" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/><path d="M9.5 17h5"/></svg>';
+
+  /* ---------- configuración inicial (sin id) ---------- */
+  if (!ID && !DEMO) {
+    $('app').style.display = 'none'; $('setup').style.display = 'grid';
+    $('btnCrear').onclick = () => {
+      const m = $('urlHoja').value.match(/\/d\/([a-zA-Z0-9_-]{20,})/);
+      if (!m) { $('linkFinal').textContent = 'No reconozco ese enlace. Debe ser de Google Sheets (…/spreadsheets/d/…).'; return; }
+      const link = location.origin + location.pathname + '?id=' + m[1];
+      $('linkFinal').innerHTML = 'Link del tablero (ábrelo en la TV y guárdalo como favorito):<br><a style="color:inherit" href="' + link + '">' + link + '</a>';
+    };
+    return;
+  }
+
+  /* ---------- reloj ---------- */
+  function reloj(){
+    const d = new Date();
+    $('hora').textContent = p2(d.getHours()) + ':' + p2(d.getMinutes());
+    $('fecha').textContent = DIAS_L[d.getDay()] + ' ' + d.getDate() + ' de ' + MESES[d.getMonth()] + ' ' + d.getFullYear();
+  }
+  reloj(); setInterval(reloj, 1000);
+
+  /* ---------- lectura ---------- */
+  function parseCSV(txt){
+    const filas = []; let fila = [], campo = '', q = false;
+    for (let i = 0; i < txt.length; i++) {
+      const c = txt[i];
+      if (q) { if (c === '"') { if (txt[i+1] === '"') { campo += '"'; i++; } else q = false; } else campo += c; }
+      else if (c === '"') q = true;
+      else if (c === ',') { fila.push(campo); campo = ''; }
+      else if (c === '\n') { fila.push(campo); filas.push(fila); fila = []; campo = ''; }
+      else if (c !== '\r') campo += c;
+    }
+    if (campo !== '' || fila.length) { fila.push(campo); filas.push(fila); }
+    return filas;
+  }
+
+  // Formato de la planilla:
+  //   fila de grupo:  GRUPO N°x | destino | VEHICULO | ACTIVIDADES
+  //   filas siguientes:          persona  | patente  | actividad
+  function interpretar(filas){
+    let titulo = '', g = null, cols = null;
+    const grupos = [];
+    for (const f of filas) {
+      const celdas = f.map(c => String(c||'').trim());
+      const iG = celdas.findIndex(c => /^GRUPO\b/.test(norm(c)));
+      if (iG >= 0) {
+        const iV = celdas.findIndex(c => norm(c).startsWith('VEHICULO'));
+        const iA = celdas.findIndex(c => norm(c).startsWith('ACTIVIDAD'));
+        cols = { p: iG + 1, v: iV >= 0 ? iV : iG + 2, a: iA >= 0 ? iA : iG + 3 };
+        g = { nombre: celdas[iG], destino: celdas[iG+1] || '', personal: [], actividades: [] };
+        grupos.push(g);
+        continue;
+      }
+      if (!g) {   // antes del primer grupo: buscar el título
+        const t = celdas.find(c => c);
+        if (t && !titulo) titulo = t;
+        continue;
+      }
+      const persona = celdas[cols.p] || '', veh = celdas[cols.v] || '';
+      const act = celdas.slice(cols.a).filter(Boolean).join(' ');
+      if (persona) g.personal.push({ nombre: persona, veh: veh });
+      if (act) g.actividades.push(act);
+    }
+    return { titulo, grupos };
+  }
+
+  // Lee la planilla con <script> (JSONP de Google): funciona desde internet y desde un archivo local
+  function leerHoja(){
+    return new Promise((ok, mal) => {
+      const cb = '__hoja' + Date.now();
+      const s = document.createElement('script');
+      const fin = () => { delete window[cb]; s.remove(); clearTimeout(tm); };
+      const tm = setTimeout(() => { fin(); mal(new Error('Sin respuesta de Google. Revisa internet y que la planilla esté compartida como "Cualquier persona con el enlace".')); }, 20000);
+      window[cb] = resp => {
+        fin();
+        if (!resp || resp.status === 'error') return mal(new Error('Google respondió con error al leer la planilla'));
+        const filas = resp.table.rows.map(r => (r.c || []).map(c => c == null ? '' : String(c.f != null ? c.f : (c.v != null ? c.v : ''))));
+        ok(filas);
+      };
+      s.onerror = () => { fin(); mal(new Error('La planilla no está compartida como "Cualquier persona con el enlace"')); };
+      s.src = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(ID) + '/gviz/tq?tqx=out:json;responseHandler:' + cb +
+              '&headers=0' + (HOJA ? '&sheet=' + encodeURIComponent(HOJA) : '') + '&_=' + Date.now();
+      document.head.appendChild(s);
+    });
+  }
+
+  async function cargar(){
+    if (DEMO) return interpretar(demoFilas());
+    return interpretar(await leerHoja());
+  }
+
+  function demoFilas(){
+    const d = new Date(), f = p2(d.getDate()) + '-' + p2(d.getMonth()+1) + '-' + d.getFullYear();
+    return [
+      ['', 'PROGRAMACIÓN ' + DIAS_L[d.getDay()].toUpperCase() + ' ' + f],
+      ['GRUPO N°1','1. SUBESTACIÓN NORTE','VEHICULO','ACTIVIDADES'],
+      ['','JUAN PÉREZ SOTO','ABCD-11','1.1 MANTENCIÓN DE TABLERO'],
+      ['','PEDRO ROJAS DÍAZ','ABCD-11','1.2 MEDICIÓN DE MALLA A TIERRA'],
+      ['GRUPO N°2','1. PLANTA / 2. BODEGA','','ACTIVIDADES'],
+      ['','LUIS GONZÁLEZ','EFGH-22','1.1 CAMBIO DE LUMINARIAS'],
+      ['','','','2.1 RETIRO DE MATERIALES'],
+      ['GRUPO N°3','1. LÍNEA 23 KV','','ACTIVIDADES'],
+      ['','CARLOS MUÑOZ','IJKL-33','1.1 INSPECCIÓN TERMOGRÁFICA'],
+      ['GRUPO N°4','1. CAMPAMENTO','','ACTIVIDADES'],
+      ['','MARIO SILVA','MNOP-44','1.1 LAVADO DE AISLACIÓN']
+    ];
+  }
+
+  /* ---------- dibujo ---------- */
+  let datos = null, pagina = 0, t0 = performance.now();
+
+  function tarjeta(g){
+    // agrupar personal por vehículo (en el orden en que aparece)
+    const bloques = [];
+    g.personal.forEach(p => {
+      let b = bloques.find(x => x.veh === p.veh);
+      if (!b) { b = { veh: p.veh, nombres: [] }; bloques.push(b); }
+      b.nombres.push(p.nombre);
+    });
+    const per = bloques.map(b =>
+      (b.veh ? `<div class="veh">${ICO_VEH}${esc(b.veh)}</div>` : '') +
+      b.nombres.map(n => `<div class="per"><span>${esc(n)}</span></div>`).join('')
+    ).join('') || '<div class="per" style="color:var(--muted)">—</div>';
+    const acts = g.actividades.map(a => {
+      const m = a.match(/^(\d+(?:\.\d+)*\.?)\s+(.*)$/);
+      return m ? `<div class="act"><span class="n">${esc(m[1])}</span><span>${esc(m[2])}</span></div>`
+               : `<div class="act nota"><span class="n">›</span><span>${esc(a)}</span></div>`;
+    }).join('') || '<div class="act nota">Sin actividades</div>';
+    return `<div class="card">
+      <div class="card-h"><span class="gtag">${esc(g.nombre)}</span><span class="destino">${ICO_PIN}${esc(g.destino)}</span></div>
+      <div class="card-b"><div class="col"><div class="lbl">PERSONAL</div>${per}</div><div class="col"><div class="lbl">ACTIVIDADES</div>${acts}</div></div>
+    </div>`;
+  }
+
+  // achica la letra de cada tarjeta hasta que el contenido quepa
+  function ajustar(){
+    document.querySelectorAll('.card-b').forEach(b => {
+      let f = 2.9;
+      b.style.setProperty('--f', f + 'vh');
+      const cabe = () => [...b.children].every(c => c.scrollHeight <= c.clientHeight + 1);
+      while (!cabe() && f > 1.4) { f -= 0.1; b.style.setProperty('--f', f.toFixed(2) + 'vh'); }
+    });
+    // nombres largos: achicar solo ese nombre para que se vea completo
+    document.querySelectorAll('.per').forEach(p => {
+      let e = 1; p.style.fontSize = '';
+      const s = p.firstElementChild; if (!s) return;
+      while (s.getBoundingClientRect().width > p.clientWidth - 2 && e > 0.7) { e -= 0.03; p.style.fontSize = e.toFixed(2) + 'em'; }
+    });
+  }
+
+  function fechaDelTitulo(t){
+    const m = String(t).match(/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/);
+    if (!m) return null;
+    let y = +m[3]; if (y < 100) y += 2000;
+    return new Date(y, m[2]-1, +m[1]);
+  }
+
+  function dibujar(animar){
+    const gs = datos.grupos, n = GRUPOS_POR_PAGINA, paginas = Math.max(1, Math.ceil(gs.length / n));
+    if (pagina >= paginas) pagina = 0;
+
+    $('titulo').textContent = datos.titulo || 'Programación de trabajos';
+    const f = fechaDelTitulo(datos.titulo), hoy = new Date(); hoy.setHours(0,0,0,0);
+    const vieja = f && f.getTime() !== hoy.getTime();
+    $('subtitulo').innerHTML = esc(SUBTITULO) + (vieja ? ' <span class="alerta">⚠ ESTA PROGRAMACIÓN NO ES DE HOY</span>' : '');
+
+    const personas = gs.reduce((s,g) => s + g.personal.length, 0);
+    const vehiculos = new Set(gs.flatMap(g => g.personal.map(p => p.veh).filter(Boolean))).size;
+    const acts = gs.reduce((s,g) => s + g.actividades.filter(a => /^\d/.test(a)).length, 0);
+    $('resumen').innerHTML =
+      `<div class="chip">GRUPOS <b>${gs.length}</b></div><div class="chip">PERSONAS <b>${personas}</b></div>` +
+      `<div class="chip">VEHÍCULOS <b>${vehiculos}</b></div><div class="chip">ACTIVIDADES <b>${acts}</b></div>` +
+      (paginas > 1 ? `<div class="pagina mono">PÁGINA ${pagina+1} / ${paginas}</div>` : '');
+
+    const cont = $('grupos');
+    if (!gs.length) { cont.innerHTML = '<div class="vacio">Sin grupos programados</div>'; return; }
+    const items = gs.slice(pagina*n, (pagina+1)*n);
+    cont.style.gridTemplateRows = `repeat(${Math.ceil(Math.min(n, Math.max(items.length, 2)) / 2)}, 1fr)`;
+    cont.classList.remove('anim');
+    cont.innerHTML = items.map(tarjeta).join('');
+    ajustar();
+    if (animar) { void cont.offsetWidth; cont.classList.add('anim'); [...cont.children].forEach((el,k) => el.style.animationDelay = (k*120) + 'ms'); }
+  }
+
+  function estado(ok, txt){ const el = $('actualizado'); el.classList.toggle('error', !ok); el.textContent = txt; }
+
+  async function refrescar(primera){
+    try {
+      const nuevo = await cargar();
+      const cambio = !datos || JSON.stringify(nuevo) !== JSON.stringify(datos);
+      datos = nuevo;
+      if (cambio) dibujar(!qs.has('estatico'));
+      const d = new Date(); estado(true, 'Actualizado ' + p2(d.getHours()) + ':' + p2(d.getMinutes()));
+    } catch (e) {
+      if (!datos) $('grupos').innerHTML = '<div class="vacio"><div>No se pudo leer la planilla.<br><small style="font-size:.6em">' + esc(e.message) + '</small></div></div>';
+      estado(false, '⚠ Sin conexión — mostrando último dato');
+    }
+  }
+
+  $('mensaje').textContent = MENSAJE;
+  $('mensaje').style.animationDuration = Math.max(15, MENSAJE.length * 0.28) + 's';
+  window.addEventListener('resize', () => datos && ajustar());
+  if (document.fonts) document.fonts.ready.then(() => datos && ajustar());   // re-ajusta cuando cargan las letras
+  setInterval(() => datos && ajustar(), 5000);
+
+  (function tick(now){
+    if (datos && Math.ceil(datos.grupos.length / GRUPOS_POR_PAGINA) > 1) {
+      const r = Math.min(1, (now - t0) / (SEGUNDOS_POR_PAGINA*1000));
+      $('barra').style.width = (r*100) + '%';
+      if (r >= 1) { pagina++; dibujar(true); t0 = now; }
+    } else { $('barra').style.width = '0'; t0 = now; }
+    requestAnimationFrame(tick);
+  })(t0);
+
+  refrescar(true);
+  setInterval(() => refrescar(false), 60000);       // relee la planilla cada 1 minuto
+  setTimeout(() => location.reload(), 6 * 3600000);  // recarga completa cada 6 h
+})();
+</script>
+</body>
+</html>
