@@ -118,7 +118,8 @@
   /* ========================================== */
 
   const qs = new URLSearchParams(location.search);
-  const ID = (qs.get('id') || '').trim();
+  const PLANILLA_POR_DEFECTO = '1fsj5xfHzyX9Kup9gHCde_W_Lx62muP4fLFoeM-EABGc';   // planilla de Google Sheets
+  const ID = (qs.get('id') || PLANILLA_POR_DEFECTO).trim();
   const HOJA = qs.get('hoja') || '';           // opcional: ?hoja=NombrePestaña (por defecto la primera)
   const DEMO = qs.has('demo');
   const $ = id => document.getElementById(id);
