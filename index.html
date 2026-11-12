@@ -77,7 +77,9 @@
   @keyframes entra{from{opacity:0;transform:translateY(.8vh)}to{opacity:1;transform:none}}
 
   /* tarjetas */
-  #grupos{grid-area:g;display:grid;grid-template-columns:1fr 1fr;gap:1.5vh 1.2vw;padding:1.4vh 2vw;min-height:0}
+  #grupos{grid-area:g;display:flex;gap:1.2vw;padding:1.4vh 2vw;min-height:0}
+  .columna{flex:1;min-width:0;display:flex;flex-direction:column;gap:1.5vh;overflow:hidden}
+  #grupos.compacto .columna{gap:1vh}
   .card{background:var(--card);border:1px solid var(--card-borde);border-radius:1.1vh;display:flex;flex-direction:column;overflow:hidden;min-height:0;box-shadow:0 .4vh 1.4vh rgba(0,40,90,.08)}
   .card-h{display:flex;align-items:center;gap:1vw;padding:.9vh 1.1vw;background:var(--card-h);color:var(--card-h-txt)}
   .gtag{flex:none;background:var(--tag-bg);color:var(--tag-txt);font-weight:700;font-size:3vh;letter-spacing:.1vw;padding:.25vh .9vw;border-radius:.5vh;text-transform:uppercase}
@@ -109,7 +111,7 @@
   #grupos.compacto .lbl{margin-bottom:.3vh;padding-bottom:.2vh}
   #grupos.compacto .veh{margin:.4vh 0 .2vh}
   #destacado .txt{font-size:2.4vh}
-  .vacio{grid-column:1/-1;display:grid;place-items:center;font-size:4vh;color:var(--nota);text-align:center}
+  .vacio{flex:1;display:grid;place-items:center;font-size:4vh;color:var(--nota);text-align:center}
 
   .anim .card{animation:flip .6s cubic-bezier(.2,.8,.3,1) both;transform-origin:top}
   @keyframes flip{from{transform:rotateX(-90deg);opacity:0}to{transform:none;opacity:1}}
@@ -349,32 +351,49 @@
     </div>`;
   }
 
-  /* ---------- páginas ----------
-     Normal: 4 grupos por página (2 x 2); si un grupo es grande, se achica la letra para que quepa.
-     Compacto: si caben MÁS de 4 grupos en una sola página con letra normal (porque son grupos chicos,
-     de 1 o 2 personas), se juntan en la misma página y cada tarjeta toma solo el alto que necesita. */
-  const LETRA_COMPACTA = 2.2;      // vh: tamaño de letra al juntar grupos chicos en una página
+  /* ---------- páginas y tamaño de los cuadros ----------
+     Los grupos se reparten en 2 columnas que siempre llenan toda la pantalla (sin espacios vacíos).
+     Cada cuadro recibe un alto proporcional a su contenido: más gente/actividades = cuadro más alto.
+     La letra se agranda lo más posible sin que nada se corte.
+     Se juntan más de 4 grupos en una página solo si caben con letra legible (grupos chicos);
+     si no, quedan 4 por página y van rotando. */
+  const LETRA_MIN_JUNTOS = 2.2;    // vh: letra mínima para juntar más de 4 grupos en una página
+  const LETRA_MAX = 3.0, LETRA_MIN = 1.4;
   const MAX_POR_PAGINA = 8;
-  let paginas = [], modoActual = 'fijo';
+  let paginas = [];
 
-  function ponerTarjetas(items, modo){
+  function montar(items){
     const cont = $('grupos');
-    modoActual = modo;
-    cont.classList.toggle('compacto', modo === 'auto');
-    const filas = Math.ceil(Math.max(items.length, 2) / 2);
-    cont.style.gridTemplateRows = modo === 'auto' ? `repeat(${filas}, auto)` : `repeat(${filas}, 1fr)`;
     cont.classList.remove('anim');
-    cont.innerHTML = items.map(tarjeta).join('');
+    cont.classList.toggle('compacto', items.length > GRUPOS_POR_PAGINA);
+    cont.innerHTML = '<div class="columna"></div><div class="columna"></div>';
+    const cols = [...cont.children];
+    const tmp = document.createElement('div'); tmp.innerHTML = items.map(tarjeta).join('');
+    const cards = [...tmp.children];
+    cards.forEach(c => { c.style.flex = 'none'; c.querySelector('.card-b').style.setProperty('--f', '2.4vh'); cols[0].appendChild(c); });
+    const h = cards.map(c => c.offsetHeight);
+    if (cards.length === 1) cols[1].remove();
+    else {   // reparte en orden, cada cuadro a la columna que va más corta
+      const alto = [0, 0];
+      cards.forEach((c, i) => { const k = alto[0] <= alto[1] ? 0 : 1; cols[k].appendChild(c); alto[k] += h[i]; });
+    }
+    return { cols: [...cont.children], cards };
   }
 
-  function cabeCompacto(items){
-    ponerTarjetas(items, 'auto');
-    const cont = $('grupos');
-    cont.style.gridTemplateRows = `repeat(${Math.ceil(items.length / 2)}, max-content)`;   // alto real de cada fila
-    document.querySelectorAll('.card-b').forEach(b => b.style.setProperty('--f', LETRA_COMPACTA + 'vh'));
-    const ok = cont.scrollHeight <= cont.clientHeight + 1 &&
-               [...cont.querySelectorAll('.col')].every(c => c.scrollHeight <= c.clientHeight + 1);
-    return ok;
+  function ajustarPagina(cols, cards){
+    const setF = f => cards.forEach(c => c.querySelector('.card-b').style.setProperty('--f', f.toFixed(2) + 'vh'));
+    const cabe = () => cols.every(c => c.scrollHeight <= c.clientHeight + 1);
+    cards.forEach(c => c.style.flex = 'none');
+    let lo = LETRA_MIN, hi = LETRA_MAX;
+    setF(hi);
+    if (cabe()) lo = hi;
+    else for (let i = 0; i < 10; i++) { const m = (lo + hi) / 2; setF(m); if (cabe()) lo = m; else hi = m; }
+    setF(lo);
+    // el espacio que sobra se reparte: cada cuadro crece en proporción a su contenido
+    const nat = cards.map(c => c.offsetHeight);
+    cards.forEach((c, i) => c.style.flex = `${nat[i]} 1 0px`);
+    nombres(cards);
+    return lo;
   }
 
   function calcularPaginas(){
@@ -382,27 +401,26 @@
     let i = 0;
     while (i < gs.length) {
       const resto = gs.length - i;
-      let pag = null;
-      for (let k = Math.min(resto, MAX_POR_PAGINA); k > GRUPOS_POR_PAGINA; k--) {
-        if (cabeCompacto(gs.slice(i, i + k))) { pag = { desde: i, hasta: i + k, modo: 'auto' }; break; }
+      let k = 0;
+      for (let n = Math.min(resto, MAX_POR_PAGINA); n > GRUPOS_POR_PAGINA; n--) {
+        const m = montar(gs.slice(i, i + n));
+        if (ajustarPagina(m.cols, m.cards) >= LETRA_MIN_JUNTOS - 0.01) { k = n; break; }
       }
-      if (!pag) { const k = Math.min(resto, GRUPOS_POR_PAGINA); pag = { desde: i, hasta: i + k, modo: 'fijo' }; }
-      paginas.push(pag); i = pag.hasta;
+      if (!k) k = Math.min(resto, GRUPOS_POR_PAGINA);
+      paginas.push({ desde: i, hasta: i + k }); i += k;
     }
-    if (!paginas.length) paginas = [{ desde: 0, hasta: 0, modo: 'fijo' }];
+    if (!paginas.length) paginas = [{ desde: 0, hasta: 0 }];
   }
 
-  function ajustar(){
-    if (modoActual === 'auto') {
-      document.querySelectorAll('.card-b').forEach(b => b.style.setProperty('--f', LETRA_COMPACTA + 'vh'));
-    } else document.querySelectorAll('.card-b').forEach(b => {
-      let f = 2.8;
-      b.style.setProperty('--f', f + 'vh');
-      const cabe = () => [...b.children].every(c => c.scrollHeight <= c.clientHeight + 1);
-      while (!cabe() && f > 1.4) { f -= 0.1; b.style.setProperty('--f', f.toFixed(2) + 'vh'); }
-    });
-    // nombres: mismo tamaño para toda la lista de cada grupo (el que necesite el nombre más largo)
-    document.querySelectorAll('.card').forEach(card => {
+  function ajustar(){   // re-ajuste periódico de la página visible (p. ej. cuando terminan de cargar las letras)
+    const cont = $('grupos');
+    const cards = [...cont.querySelectorAll('.card')];
+    if (cards.length) ajustarPagina([...cont.querySelectorAll('.columna')], cards);
+  }
+
+  // nombres: mismo tamaño para toda la lista de cada grupo (el que necesite el nombre más largo)
+  function nombres(cards){
+    cards.forEach(card => {
       const pers = [...card.querySelectorAll('.per')];
       const fija = e => pers.forEach(p => p.style.fontSize = e.toFixed(2) + 'em');
       const sobra = () => pers.some(p => { const s = p.querySelector('span'); return s.scrollWidth > s.clientWidth + 1; });
@@ -436,11 +454,11 @@
       `<div class="chip">VEHÍCULOS <b>${vehiculos}</b></div><div class="chip">ACTIVIDADES <b>${acts}</b></div>` +
       (total > 1 ? `<div class="pagina mono">PÁGINA ${pagina+1} / ${total}</div>` : '');
     const cont = $('grupos');
-    if (!gs.length) { cont.style.gridTemplateRows = ''; cont.innerHTML = '<div class="vacio">Sin grupos programados</div>'; return; }
+    if (!gs.length) { cont.innerHTML = '<div class="vacio">Sin grupos programados</div>'; return; }
     const p = paginas[pagina];
-    ponerTarjetas(gs.slice(p.desde, p.hasta), p.modo);
-    ajustar();
-    if (animar) { void cont.offsetWidth; cont.classList.add('anim'); [...cont.children].forEach((el,k) => el.style.animationDelay = (k*120) + 'ms'); }
+    const m = montar(gs.slice(p.desde, p.hasta));
+    ajustarPagina(m.cols, m.cards);
+    if (animar) { void cont.offsetWidth; cont.classList.add('anim'); m.cards.forEach((el,k) => el.style.animationDelay = (k*120) + 'ms'); }
   }
 
   function estado(ok, txt){ const el = $('actualizado'); el.classList.toggle('error', !ok); el.textContent = txt; }
