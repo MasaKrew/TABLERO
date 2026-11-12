@@ -119,6 +119,35 @@
   .estatico #pantalla img{animation:none}
   #app.con-imagen #grupos{visibility:hidden}
   #app.con-imagen #resumen{display:none}
+  #pantalla{position:relative;overflow:hidden}
+
+  /* calendario de lavados (pestaña CRONOGRAMA) */
+  .cal{height:100%;overflow:hidden;font-family:Barlow,Arial,sans-serif;font-size:var(--fc,2vh);color:#16263a}
+  .cal-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1em 1.1em;align-items:start}
+  .dcard{background:#fff;border-radius:.7em;overflow:hidden;border-top:.3em solid var(--naranjo);box-shadow:0 .3em 1em rgba(0,40,90,.10)}
+  .dcard-h{display:flex;align-items:center;gap:.6em;padding:.45em .8em;background:#0F3D7A;color:#fff}
+  .dnum{font-size:2.3em;font-weight:700;line-height:1}
+  .dmes{display:flex;flex-direction:column;line-height:1.15}
+  .dmes b{font-size:.78em;letter-spacing:.16em;color:#F59A3D}
+  .dmes i{font-style:normal;font-size:.66em;letter-spacing:.16em;opacity:.8}
+  .dpill{margin-left:auto;font-size:.72em;background:rgba(255,255,255,.16);padding:.2em .75em;border-radius:1em;white-space:nowrap}
+  .dbody{padding:.55em .8em .3em}
+  .lav{border-left:.22em solid var(--c);padding:.05em 0 .05em .7em;margin:.25em 0 .55em}
+  .lav .cl{color:var(--c);font-size:.7em;font-weight:700;letter-spacing:.1em}
+  .lav .ac{font-weight:700;font-size:.98em;line-height:1.2}
+  .lav .de{color:#6b7a8c;font-size:.76em;line-height:1.25}
+  .cal-res{grid-column:span 2;display:flex;flex-direction:column;gap:1em}
+  .rcard{background:#fff;border-radius:.7em;border-top:.32em solid #0F3D7A;padding:.8em 1em 1em;box-shadow:0 .3em 1em rgba(0,40,90,.10)}
+  .rtit{font-size:.78em;font-weight:700;letter-spacing:.22em;color:#0F3D7A;margin-bottom:.6em}
+  .rtiles{display:grid;gap:.7em}
+  .rtile{background:#F3F5F9;border-left:.25em solid var(--c);border-radius:.4em;padding:.5em .8em}
+  .rtile .cl{color:var(--c);font-size:.72em;font-weight:700;letter-spacing:.1em}
+  .rtile .n{font-size:1.9em;font-weight:700;color:#0F3D7A;line-height:1.1}
+  .rtile .d{font-size:.74em;color:#6b7a8c}
+  .mtile{background:linear-gradient(135deg,#1A5BA8,#0F3D7A);border-radius:.4em;padding:.45em .9em .55em;color:#fff}
+  .mtile .n{font-size:1.9em;font-weight:700;line-height:1.15}
+  .mtile .l{font-size:.68em;letter-spacing:.16em;opacity:.85}
+  .anim-cal .dcard,.anim-cal .rcard{animation:flip .55s cubic-bezier(.2,.8,.3,1) both}
   .vacio{flex:1;display:grid;place-items:center;font-size:4vh;color:var(--nota);text-align:center}
 
   .anim .card{animation:flip .6s cubic-bezier(.2,.8,.3,1) both;transform-origin:top}
@@ -206,6 +235,7 @@
   const PLANILLA_POR_DEFECTO = '1fsj5xfHzyX9Kup9gHCde_W_Lx62muP4fLFoeM-EABGc';
   const GRUPOS_POR_PAGINA = 4;
   const SEGUNDOS_POR_PAGINA = 20;
+  const SEGUNDOS_CALENDARIO = 20;  // tiempo en pantalla del calendario de lavados
   const SEG_POR_LETRA = 0.20;      // velocidad de la cinta: menos = más rápida (antes 0.26)
   const SUBTITULO = 'Programación diaria · Grupos de trabajo';
   const AVISOS = [
@@ -297,7 +327,58 @@
     }).filter(p => p && p.on);
   }
 
-  function leerHoja(nombre){
+  /* ---------- pestaña CRONOGRAMA: el cronograma de lavados pegado tal cual desde el Excel ----------
+     Filas 1-2: encabezados (FRECUENCIA, CLIENTE, FAENA, TIPO, ACTIVIDAD y, sobre los días, el MES).
+     Columnas de días con un "1" = ese día hay lavado. Filas sin CLIENTE (p. ej. "OTROS") se ignoran. */
+  const MESES_UP = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+  function tipoTitulo(s){   // "PLANTA CERRILLOS" -> "Planta Cerrillos"; respeta siglas como N.A., S/E, N°1, M.P.C.
+    return String(s||'').trim().split(/\s+/).map((w, i) => {
+      if (/^KV$/i.test(w)) return 'kV';
+      if (i > 0 && /^(DE|DEL|LA|LAS|EL|LOS|Y|EN|A)$/i.test(w)) return w.toLowerCase();
+      if (/[\d.\/°]/.test(w) && w.length <= 7) return w.toUpperCase();
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    }).join(' ').replace(/ - /g, ' – ');
+  }
+  function interpretarCronograma(filas){
+    const L = (filas && filas.labels) || [], nl = L.map(norm);
+    const col = k => nl.findIndex(s => s.includes(k));
+    const iC = col('CLIENTE'), iA = col('ACTIVIDAD');
+    if (iC < 0 || iA < 0) return null;                       // no existe la pestaña CRONOGRAMA
+    const iF = col('FAENA'), iT = col('TIPO'), iQ = col('FRECUENCIA');
+    const ultimo = Math.max(iC, iA, iF, iT, iQ);
+    const hoy = new Date();
+    let mes = -1, previo = 0; const dias = [];
+    L.forEach((lab, i) => {
+      if (i <= ultimo) return;
+      const n = norm(lab), md = n.match(/(\d{1,2})\s*$/);
+      if (!md) return;
+      const dia = +md[1]; if (dia < 1 || dia > 31) return;
+      const m = MESES_UP.findIndex(x => n.includes(x));
+      if (m >= 0) mes = m;
+      else if (mes < 0) mes = hoy.getMonth();                  // sin nombre de mes: se asume el mes actual
+      else if (dia <= previo) mes = (mes + 1) % 12;            // los días vuelven a 1: empieza el mes siguiente
+      previo = dia; dias.push({ i, dia, mes });
+    });
+    const anio = m => { let y = hoy.getFullYear(); if (m - hoy.getMonth() > 6) y--; if (hoy.getMonth() - m > 6) y++; return y; };
+    const frec = s => String(s||'').trim().toLowerCase().replace(/\bdias\b/, 'días');
+    const lavados = [];
+    filas.forEach(f => {
+      const cliente = String(f[iC]||'').trim();
+      if (!cliente || norm(cliente) === 'CLIENTE') return;
+      dias.forEach(d => {
+        const v = String(f[d.i]||'').trim();
+        if (!v || v === '0') return;
+        const fecha = new Date(anio(d.mes), d.mes, d.dia);
+        if (fecha.getMonth() !== d.mes) return;                  // p. ej. 31 de noviembre
+        lavados.push({ fecha: fecha.toISOString().slice(0,10), cliente: cliente.toUpperCase(),
+          actividad: String(f[iA]||'').trim(),
+          detalle: [tipoTitulo(iF >= 0 ? f[iF] : ''), tipoTitulo(iT >= 0 ? f[iT] : ''), frec(iQ >= 0 ? f[iQ] : '')].filter(Boolean).join(' · ') });
+      });
+    });
+    return lavados;
+  }
+
+  function leerHoja(nombre, filasEncabezado){
     return new Promise((ok, mal) => {
       const cb = '__hoja' + Date.now();
       const s = document.createElement('script');
@@ -306,11 +387,13 @@
       window[cb] = resp => {
         fin();
         if (!resp || resp.status === 'error') return mal(new Error('Google respondió con error al leer la planilla'));
-        ok(resp.table.rows.map(r => (r.c || []).map(c => c == null ? '' : String(c.f != null ? c.f : (c.v != null ? c.v : '')))));
+        const filas = resp.table.rows.map(r => (r.c || []).map(c => c == null ? '' : String(c.f != null ? c.f : (c.v != null ? c.v : ''))));
+        filas.labels = resp.table.cols.map(c => String(c.label || ''));   // títulos de columna (si se piden filas de encabezado)
+        ok(filas);
       };
       s.onerror = () => { fin(); mal(new Error('La planilla no está compartida como "Cualquier persona con el enlace"')); };
       s.src = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(ID) + '/gviz/tq?tqx=out:json;responseHandler:' + cb +
-              '&headers=0' + (nombre ? '&sheet=' + encodeURIComponent(nombre) : '') + '&_=' + Date.now();
+              '&headers=' + (filasEncabezado || 0) + (nombre ? '&sheet=' + encodeURIComponent(nombre) : '') + '&_=' + Date.now();
       document.head.appendChild(s);
     });
   }
@@ -339,6 +422,26 @@
     return filas;
   }
 
+  // datos de prueba: copia del cronograma de noviembre (para ?demo)
+  function demoCronograma(){
+    const h = new Date(), mes = MESES_UP[h.getMonth()];
+    const marcas = (...d) => Array.from({ length: 30 }, (_, i) => d.includes(i + 1) ? '1' : '');
+    const filas = [
+      ['30 DIAS','NUEVA ATACAMA','S/E CALDERA','LAVADO','Subestación CALDERA', ...marcas(25)],
+      ['60 DIAS','NUEVA ATACAMA','PLANTA N.A.','LAVADO','Tramo 1 A I', ...marcas(26)],
+      ['30 DIAS','NUEVA ATACAMA','PLANTA N.A.','LAVADO','Tramo 1 A II', ...marcas(25)],
+      ['90 DIAS','NUEVA ATACAMA','PLANTA N.A.','LAVADO','Tramo 1 B', ...marcas(23, 24, 25)],
+      ['30 DIAS','COEMIN','PLANTA CERRILLOS','LAVADO','Planta Cerrillos', ...marcas(2, 18)],
+      ['30 DIAS','COEMIN','TRANQUE RELAVE N°1','LAVADO','Tranque Relave - Paneles Solares', ...marcas(3, 17)],
+      ['90 DIAS','ATACAMA KOZAN','PLANTA A.K.','LAVADO - LIMPIEZA','Alim. Parrón 110 kV', ...marcas()],
+      ['60 DIAS','PUCOBRE','MINA PUNTA DEL COBRE','LAVADO - LIMPIEZA','Alim. M.P.C. 23 kV', ...marcas(16)],
+      ['120 DIAS','PUCOBRE','MINA GRANATE','LAVADO - LIMPIEZA','Alim. M.G. 23 kV', ...marcas(22)],
+      ['','','','','OTROS', ...marcas(3, 4, 5, 6, 9, 10, 11)]
+    ];
+    filas.labels = ['FRECUENCIA DE LAVADO','CLIENTE','FAENA','TIPO','ACTIVIDAD', mes + ' 1', ...Array.from({ length: 29 }, (_, i) => String(i + 2))];
+    return filas;
+  }
+
   async function cargar(){
     if (DEMO) {
       const d = interpretar(demoFilas());
@@ -346,11 +449,13 @@
         ['Corte programado de energía en bodega mañana de 08:00 a 10:00 hrs','SI'],
         ['Recordar realizar la confección de documentación para cada faena y entregarla al Departamento de Prevención de Riesgos',''],
         ['Reunión de seguridad el viernes 08:00 hrs','']]);
+      d.cronograma = interpretarCronograma(demoCronograma());
       return d;
     }
     const d = interpretar(await leerHoja(HOJA));
     try { d.avisos = interpretarAvisos(await leerHoja('AVISOS')); } catch (e) { d.avisos = null; }
     try { d.pantallas = interpretarPantallas(await leerHoja('PANTALLAS')); } catch (e) { d.pantallas = datos ? datos.pantallas : []; }
+    try { d.cronograma = interpretarCronograma(await leerHoja('CRONOGRAMA', 2)); } catch (e) { d.cronograma = datos ? datos.cronograma : null; }
     return d;
   }
 
@@ -474,8 +579,64 @@
   }
 
   /* ---------- pantallas extra: una imagen después de cada vuelta de la programación ---------- */
-  const imagenes = () => (datos && datos.pantallas) || [];
-  function precargar(){ imagenes().forEach(p => { const i = new Image(); i.src = p.url; }); }
+  // lista de pantallas extra: primero el calendario de lavados del mes (si hay), luego las imágenes de PANTALLAS
+  function calendarioDelMes(){
+    if (!datos || !datos.cronograma) return null;
+    const h = new Date(), clave = h.getFullYear() + '-' + p2(h.getMonth() + 1);
+    const lav = datos.cronograma.filter(l => l.fecha.startsWith(clave));
+    if (!lav.length) return null;
+    return { tipo: 'cal', lav, seg: SEGUNDOS_CALENDARIO,
+             titulo: 'CALENDARIO LAVADO DE AISLACIÓN · ' + MESES_UP[h.getMonth()] + ' ' + h.getFullYear() };
+  }
+  const imagenes = () => { const c = calendarioDelMes(); return (c ? [c] : []).concat((datos && datos.pantallas) || []); };
+  function precargar(){ imagenes().forEach(p => { if (p.url) { const i = new Image(); i.src = p.url; } }); }
+
+  /* ---------- calendario de lavados (mismo diseño de la imagen aprobada) ---------- */
+  const COLORES_CLIENTE = { 'NUEVA ATACAMA': '#1F5FBF', 'COEMIN': '#E07B20', 'PUCOBRE': '#2E8B57' };
+  const PALETA_EXTRA = ['#7B4FC4', '#C2185B', '#00838F', '#6D4C41', '#5C6BC0', '#9E9D24'];
+  function colorCliente(c, orden){ return COLORES_CLIENTE[c] || PALETA_EXTRA[orden.indexOf(c) % PALETA_EXTRA.length]; }
+  const DIAS_UP = ['DOMINGO','LUNES','MARTES','MIÉRCOLES','JUEVES','VIERNES','SÁBADO'];
+
+  function htmlCalendario(lav){
+    const clientes = [...new Set(lav.map(l => l.cliente))];
+    const extra = clientes.filter(c => !COLORES_CLIENTE[c]);
+    const porDia = {};
+    lav.forEach(l => (porDia[l.fecha] = porDia[l.fecha] || []).push(l));
+    const fechas = Object.keys(porDia).sort();
+    const tarjetas = fechas.map(f => {
+      const d = new Date(f + 'T12:00:00'), items = porDia[f];
+      return `<div class="dcard">
+        <div class="dcard-h"><span class="dnum">${p2(d.getDate())}</span>
+          <span class="dmes"><b>${MESES_UP[d.getMonth()]}</b><i>${DIAS_UP[d.getDay()]}</i></span>
+          <span class="dpill">${items.length} ${items.length === 1 ? 'lavado' : 'lavados'}</span></div>
+        <div class="dbody">${items.map(l => `<div class="lav" style="--c:${colorCliente(l.cliente, extra)}">
+          <div class="cl">${esc(l.cliente)}</div><div class="ac">${esc(l.actividad)}</div><div class="de">${esc(l.detalle)}</div></div>`).join('')}</div>
+      </div>`;
+    }).join('');
+    const resCli = clientes.map(c => {
+      const dd = [...new Set(lav.filter(l => l.cliente === c).map(l => +l.fecha.slice(8)))].sort((a, b) => a - b);
+      const n = lav.filter(l => l.cliente === c).length;
+      return `<div class="rtile" style="--c:${colorCliente(c, extra)}"><div class="cl">${esc(c)}</div><div class="n">${n}</div>
+        <div class="d">${n === 1 ? 'lavado' : 'lavados'} · ${dd.length === 1 ? 'día' : 'días'} ${dd.join(', ')}</div></div>`;
+    }).join('');
+    const kpi = (n, t) => `<div class="mtile"><div class="n">${n}</div><div class="l">${t}</div></div>`;
+    return `<div class="cal"><div class="cal-grid">${tarjetas}
+      <div class="cal-res">
+        <div class="rcard"><div class="rtit">RESUMEN POR CLIENTE</div><div class="rtiles" style="grid-template-columns:repeat(${Math.min(clientes.length, 4)},1fr)">${resCli}</div></div>
+        <div class="rcard"><div class="rtit">RESUMEN DEL MES</div><div class="rtiles" style="grid-template-columns:repeat(3,1fr)">
+          ${kpi(lav.length, 'LAVADOS')}${kpi(fechas.length, 'DÍAS CON FAENA')}${kpi(clientes.length, 'CLIENTES')}</div></div>
+      </div></div></div>`;
+  }
+
+  function ajustarCalendario(){       // letra lo más grande posible sin que nada se corte
+    const cal = document.querySelector('#pantalla .cal');
+    if (!cal) return;
+    const grid = cal.firstElementChild;
+    const cabe = () => grid.offsetHeight <= cal.clientHeight - 10 && grid.scrollWidth <= cal.clientWidth + 1;   // deja un margen abajo
+    let lo = 0.8, hi = 3.2;
+    for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2; cal.style.setProperty('--fc', m + 'vh'); if (cabe()) lo = m; else hi = m; }
+    cal.style.setProperty('--fc', lo + 'vh');
+  }
 
   function mostrarImagen(){
     const lista = imagenes();
@@ -483,7 +644,16 @@
     if (iImg >= lista.length) iImg = 0;
     imgActual = lista[iImg];
     vista = 'img';
+    t0 = performance.now();              // el tiempo de la pantalla parte desde cero
     $('titulo').textContent = imgActual.titulo || 'Información';
+    if (imgActual.tipo === 'cal') {
+      $('subtitulo').textContent = 'CCRISA Ingeniería y Servicios · Programa de mantenimiento';
+      $('pantalla').innerHTML = htmlCalendario(imgActual.lav);
+      $('pantalla').className = 'on';
+      $('app').classList.add('con-imagen');
+      ajustarCalendario();
+      return true;
+    }
     $('subtitulo').textContent = 'CCRISA Ingeniería y Servicios · Información para el personal';
     const img = new Image();
     img.alt = imgActual.titulo;
@@ -492,8 +662,9 @@
       if (!intentoRespaldo && imgActual.respaldo) { intentoRespaldo = true; img.src = imgActual.respaldo; }
       else volverAProgramacion();
     };
-    img.src = imgActual.url;
-    $('pantalla').innerHTML = ''; $('pantalla').appendChild(img);
+    img.src = qs.get('imgprueba') || imgActual.url;      // ?imgprueba=... solo para vistas previas
+    $('pantalla').innerHTML = '';
+    $('pantalla').appendChild(img);
     $('pantalla').className = 'on';
     $('app').classList.add('con-imagen');
     return true;
@@ -544,7 +715,7 @@
       datos = nuevo;
       aplicarAvisos(nuevo.avisos);                 // primero los avisos: el recuadro cambia el espacio disponible
       if (cambio) { dibujar(!ESTATICO, true); precargar(); }
-      if (primera && qs.get('vista') === 'img') mostrarImagen();   // solo para pruebas: ?vista=img
+      if (primera && qs.get('vista') === 'img') { iImg = parseInt(qs.get('n')) || 0; mostrarImagen(); }   // solo para pruebas: ?vista=img
       const d = new Date(); estado(true, 'Actualizado ' + p2(d.getHours()) + ':' + p2(d.getMinutes()));
     } catch (e) {
       if (!datos) $('grupos').innerHTML = '<div class="vacio"><div>No se pudo leer la planilla.<br><small style="font-size:.6em">' + esc(e.message) + '</small></div></div>';
@@ -584,6 +755,7 @@
   // reloj de rotación (temporizador simple: funciona igual en TV, PC y navegadores en segundo plano)
   setInterval(() => {
     const now = performance.now();
+    if (ESTATICO) return;                // modo captura: sin rotación
     if (datos && (paginas.length > 1 || imagenes().length || vista === 'img')) {
       const dur = vista === 'img' && imgActual ? imgActual.seg : SEGUNDOS_POR_PAGINA;
       const r = Math.min(1, (now - t0) / (dur*1000));
