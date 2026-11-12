@@ -127,6 +127,10 @@
   #pantalla img{display:block;width:100%;height:100%;object-fit:contain;animation:aparece .7s ease both}
   @keyframes aparece{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
   .estatico #pantalla img{animation:none}
+  #pantalla .par{display:flex;gap:1.2vw;height:100%;align-items:stretch}
+  #pantalla .par img{flex:1 1 0px;min-width:0;width:auto;height:100%;object-fit:contain}
+  #pantalla .par img:first-child{object-position:left center}
+  #pantalla .par img:last-child{object-position:right center}
   #app.con-imagen #grupos{visibility:hidden}
   #app.con-imagen #resumen{display:none}
   #pantalla{position:relative;overflow:hidden}
@@ -390,8 +394,9 @@
     return filas.slice(1).map(f => {
       const l = linkImagen(f[0]);
       const s = parseFloat(String(f[2]||'').replace(',', '.'));
+      const l2 = linkImagen(f[4]);                         // columna E (opcional): segunda imagen, al lado de la primera
       return l && { ...l, titulo: String(f[1]||'').trim(), seg: s > 0 ? Math.max(3, s) : null,   // sin segundos: usa los de ORDEN
-                    on: !/^N/.test(norm(f[3])) };
+                    on: !/^N/.test(norm(f[3])), url2: l2 ? l2.url : '', respaldo2: l2 ? l2.respaldo : '' };
     }).filter(p => p && p.on);
   }
 
@@ -700,7 +705,9 @@
   }
 
   function precargar(){
-    datos.secciones.filter(s => s.tipo === 'imgs').forEach(s => s.items.forEach(p => { const i = new Image(); i.src = p.url; }));
+    datos.secciones.filter(s => s.tipo === 'imgs').forEach(s => s.items.forEach(p => {
+      [p.url, p.url2].filter(Boolean).forEach(u => { const i = new Image(); i.src = u; });
+    }));
   }
 
   /* ---------- calendario de lavados (mismo diseño de la imagen aprobada) ---------- */
@@ -768,6 +775,8 @@
   function pintarImagen(p){
     $('titulo').textContent = p.titulo || 'Información'; ajustarTitulo();
     $('subtitulo').textContent = 'Información para el personal';
+    const url2 = qs.get('img2prueba') || p.url2;           // ?img2prueba=... solo para vistas previas
+    if (url2) { pintarPar(p, url2); return; }
     const img = new Image();
     img.alt = p.titulo;
     let respaldo = false;
@@ -777,6 +786,24 @@
     };
     img.src = qs.get('imgprueba') || p.url;              // ?imgprueba=... solo para vistas previas
     $('pantalla').innerHTML = ''; $('pantalla').appendChild(img);
+    abrirPantalla();
+  }
+
+  // dos imágenes lado a lado: cada una recibe un ancho proporcional a su forma, así ambas quedan del mismo alto
+  function pintarPar(p, url2){
+    const par = document.createElement('div'); par.className = 'par';
+    let fallas = 0;
+    [[qs.get('imgprueba') || p.url, p.respaldo], [url2, p.respaldo2]].forEach(([u, resp]) => {
+      const img = new Image(); let r = false;
+      img.alt = p.titulo;
+      img.onload = () => { img.style.flex = (img.naturalWidth / img.naturalHeight) + ' 1 0px'; };
+      img.onerror = () => {
+        if (!r && resp) { r = true; img.src = resp; return; }
+        img.remove(); if (++fallas === 2 && par.isConnected) { t0 = performance.now(); avanzar(); }
+      };
+      img.src = u; par.appendChild(img);
+    });
+    $('pantalla').innerHTML = ''; $('pantalla').appendChild(par);
     abrirPantalla();
   }
 
@@ -848,7 +875,11 @@
       const primera = !datos;
       datos = nuevo;
       aplicarAvisos(nuevo.avisos);                 // primero los avisos: el recuadro cambia el espacio disponible
-      if (primera) mostrarSeccion(parseInt(qs.get('sec')) || 0, !ESTATICO);   // ?sec=N solo para pruebas
+      if (primera) {
+        mostrarSeccion(parseInt(qs.get('sec')) || 0, !ESTATICO);              // ?sec=N&sub=M solo para pruebas
+        const s = seccionActual();
+        if (qs.has('sub') && s && s.tipo === 'imgs' && s.items[+qs.get('sub')]) { sub = +qs.get('sub'); pintarImagen(s.items[sub]); }
+      }
       else if (cambio) actualizarSeccionActual();
       if (cambio) precargar();
       const d = new Date(); estado(true, 'Actualizado ' + p2(d.getHours()) + ':' + p2(d.getMinutes()));
