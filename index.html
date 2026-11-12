@@ -111,6 +111,14 @@
   #grupos.compacto .lbl{margin-bottom:.3vh;padding-bottom:.2vh}
   #grupos.compacto .veh{margin:.4vh 0 .2vh}
   #destacado .txt{font-size:2.4vh}
+  /* pantallas extra (imágenes desde la pestaña PANTALLAS) */
+  #pantalla{grid-area:g;display:none;padding:1.4vh 2vw;z-index:2;background:var(--bg);min-height:0}
+  #pantalla.on{display:block}
+  #pantalla img{display:block;width:100%;height:100%;object-fit:contain;animation:aparece .7s ease both}
+  @keyframes aparece{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
+  .estatico #pantalla img{animation:none}
+  #app.con-imagen #grupos{visibility:hidden}
+  #app.con-imagen #resumen{display:none}
   .vacio{flex:1;display:grid;place-items:center;font-size:4vh;color:var(--nota);text-align:center}
 
   .anim .card{animation:flip .6s cubic-bezier(.2,.8,.3,1) both;transform-origin:top}
@@ -118,7 +126,7 @@
 
   /* pie */
   .progreso{grid-area:p;height:.5vh;background:var(--barra-bg)}
-  .progreso div{height:100%;width:0;background:var(--barra)}
+  .progreso div{height:100%;width:0;background:var(--barra);transition:width .25s linear}
   footer{grid-area:f;display:flex;align-items:center;height:6.2vh;background:var(--pie);color:var(--pie-txt);overflow:hidden}
   .aviso{flex:none;height:100%;display:flex;align-items:center;gap:.6vw;padding:0 1.5vw;background:var(--aviso-bg);color:var(--aviso-txt);font-size:2.6vh;font-weight:700;letter-spacing:.15vw}
   .aviso svg{width:2.6vh;height:2.6vh}
@@ -170,6 +178,7 @@
   </header>
   <div class="resumen"><div class="chips" id="resumen"></div><div id="destacado"></div></div>
   <div id="grupos"><div class="vacio">Cargando programación…</div></div>
+  <div id="pantalla"></div>
   <div class="progreso"><div id="barra"></div></div>
   <footer>
     <div class="aviso"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20z"/><path d="M12 10v5"/><circle cx="12" cy="18" r=".6" fill="currentColor"/></svg>AVISOS</div>
@@ -197,6 +206,7 @@
   const PLANILLA_POR_DEFECTO = '1fsj5xfHzyX9Kup9gHCde_W_Lx62muP4fLFoeM-EABGc';
   const GRUPOS_POR_PAGINA = 4;
   const SEGUNDOS_POR_PAGINA = 20;
+  const SEG_POR_LETRA = 0.20;      // velocidad de la cinta: menos = más rápida (antes 0.26)
   const SUBTITULO = 'Programación diaria · Grupos de trabajo';
   const AVISOS = [
     'Recordar realizar la confección de documentación para cada faena y entregarla al Departamento de Prevención de Riesgos',
@@ -270,6 +280,23 @@
     return filas.slice(1).map(f => ({ texto: String(f[0]||'').trim(), imp: /^S/.test(norm(f[1])) })).filter(a => a.texto);
   }
 
+  // Pestaña PANTALLAS:  A = IMAGEN (link de Drive) · B = TÍTULO · C = SEGUNDOS · D = MOSTRAR (SI/NO)
+  function linkImagen(s){
+    s = String(s||'').trim();
+    const m = s.match(/\/d\/([\w-]{20,})/) || s.match(/[?&]id=([\w-]{20,})/);
+    if (m) return { url: 'https://lh3.googleusercontent.com/d/' + m[1] + '=w1920',
+                    respaldo: 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w1920' };
+    return /^https?:\/\//.test(s) ? { url: s, respaldo: '' } : null;
+  }
+  function interpretarPantallas(filas){
+    if (!filas || !filas.length || !norm(filas[0][0]).startsWith('IMAGEN')) return [];   // no existe la pestaña
+    return filas.slice(1).map(f => {
+      const l = linkImagen(f[0]);
+      return l && { ...l, titulo: String(f[1]||'').trim(), seg: Math.max(3, parseFloat(String(f[2]||'').replace(',', '.')) || 15),
+                    on: !/^N/.test(norm(f[3])) };
+    }).filter(p => p && p.on);
+  }
+
   function leerHoja(nombre){
     return new Promise((ok, mal) => {
       const cb = '__hoja' + Date.now();
@@ -323,11 +350,13 @@
     }
     const d = interpretar(await leerHoja(HOJA));
     try { d.avisos = interpretarAvisos(await leerHoja('AVISOS')); } catch (e) { d.avisos = null; }
+    try { d.pantallas = interpretarPantallas(await leerHoja('PANTALLAS')); } catch (e) { d.pantallas = datos ? datos.pantallas : []; }
     return d;
   }
 
   /* ---------- dibujo ---------- */
   let datos = null, pagina = 0, t0 = performance.now();
+  let vista = 'prog', iImg = 0, imgActual = null;   // vista: 'prog' (programación) o 'img' (pantalla extra)
 
   function tarjeta(g){
     const bloques = [];
@@ -435,17 +464,61 @@
     return new Date(y, m[2]-1, +m[1]);
   }
 
-  function dibujar(animar, recalcular){
-    const gs = datos.grupos;
-    if (recalcular || !paginas.length) calcularPaginas();
-    const total = paginas.length;
-    if (pagina >= total) pagina = 0;
+  function encabezadoProgramacion(){
     $('titulo').textContent = datos.titulo || 'Programación de trabajos';
     const f = fechaDelTitulo(datos.titulo), hoy = new Date(); hoy.setHours(0,0,0,0);
     const dif = f ? Math.round((f - hoy) / 86400000) : 0;
     const etiqueta = dif === 1 ? ' <span class="alerta" style="background:var(--azul)">PROGRAMACIÓN DE MAÑANA</span>'
                    : dif !== 0 ? ' <span class="alerta">⚠ ESTA PROGRAMACIÓN NO ES DE HOY</span>' : '';
     $('subtitulo').innerHTML = esc(SUBTITULO) + etiqueta;
+  }
+
+  /* ---------- pantallas extra: una imagen después de cada vuelta de la programación ---------- */
+  const imagenes = () => (datos && datos.pantallas) || [];
+  function precargar(){ imagenes().forEach(p => { const i = new Image(); i.src = p.url; }); }
+
+  function mostrarImagen(){
+    const lista = imagenes();
+    if (!lista.length) return false;
+    if (iImg >= lista.length) iImg = 0;
+    imgActual = lista[iImg];
+    vista = 'img';
+    $('titulo').textContent = imgActual.titulo || 'Información';
+    $('subtitulo').textContent = 'CCRISA Ingeniería y Servicios · Información para el personal';
+    const img = new Image();
+    img.alt = imgActual.titulo;
+    let intentoRespaldo = false;
+    img.onerror = () => {               // si no carga: probar el enlace de respaldo; si tampoco, saltar a la programación
+      if (!intentoRespaldo && imgActual.respaldo) { intentoRespaldo = true; img.src = imgActual.respaldo; }
+      else volverAProgramacion();
+    };
+    img.src = imgActual.url;
+    $('pantalla').innerHTML = ''; $('pantalla').appendChild(img);
+    $('pantalla').className = 'on';
+    $('app').classList.add('con-imagen');
+    return true;
+  }
+
+  function volverAProgramacion(){
+    vista = 'prog'; imgActual = null; iImg++;
+    $('pantalla').className = ''; $('pantalla').innerHTML = '';
+    $('app').classList.remove('con-imagen');
+    pagina = 0; t0 = performance.now();
+    dibujar(true);
+  }
+
+  function avanzar(){
+    if (vista === 'img') { volverAProgramacion(); return; }
+    if (pagina < paginas.length - 1) { pagina++; dibujar(true); return; }
+    if (!mostrarImagen()) { pagina = 0; dibujar(true); }   // fin de la vuelta: imagen (si hay) o vuelve a empezar
+  }
+
+  function dibujar(animar, recalcular){
+    const gs = datos.grupos;
+    if (recalcular || !paginas.length) calcularPaginas();
+    const total = paginas.length;
+    if (pagina >= total) pagina = 0;
+    if (vista === 'prog') encabezadoProgramacion();
     const personas = gs.reduce((s,g) => s + g.personal.length, 0);
     const vehiculos = new Set(gs.flatMap(g => g.personal.map(p => p.veh).filter(Boolean))).size;
     const acts = gs.reduce((s,g) => s + g.actividades.filter(a => /^\d/.test(a)).length, 0);
@@ -467,9 +540,11 @@
     try {
       const nuevo = await cargar();
       const cambio = !datos || JSON.stringify(nuevo) !== JSON.stringify(datos);
+      const primera = !datos;
       datos = nuevo;
       aplicarAvisos(nuevo.avisos);                 // primero los avisos: el recuadro cambia el espacio disponible
-      if (cambio) dibujar(!ESTATICO, true);
+      if (cambio) { dibujar(!ESTATICO, true); precargar(); }
+      if (primera && qs.get('vista') === 'img') mostrarImagen();   // solo para pruebas: ?vista=img
       const d = new Date(); estado(true, 'Actualizado ' + p2(d.getHours()) + ':' + p2(d.getMinutes()));
     } catch (e) {
       if (!datos) $('grupos').innerHTML = '<div class="vacio"><div>No se pudo leer la planilla.<br><small style="font-size:.6em">' + esc(e.message) + '</small></div></div>';
@@ -484,7 +559,7 @@
     const msg = lista.join('     ◆     ');
     if ($('mensaje').textContent === msg) return;          // sin cambios: no reiniciar el movimiento
     $('mensaje').textContent = msg;
-    $('mensaje').style.animationDuration = Math.max(20, msg.length * 0.26) + 's';
+    $('mensaje').style.animationDuration = Math.max(15, msg.length * SEG_POR_LETRA) + 's';
   }
   function mostrarImportante(){
     const el = $('destacado');
@@ -506,14 +581,16 @@
   if (document.fonts) document.fonts.ready.then(() => datos && dibujar(false, true));   // al cargar las letras, recalcula
   setInterval(() => datos && ajustar(), 5000);
 
-  (function tick(now){
-    if (datos && paginas.length > 1) {
-      const r = Math.min(1, (now - t0) / (SEGUNDOS_POR_PAGINA*1000));
+  // reloj de rotación (temporizador simple: funciona igual en TV, PC y navegadores en segundo plano)
+  setInterval(() => {
+    const now = performance.now();
+    if (datos && (paginas.length > 1 || imagenes().length || vista === 'img')) {
+      const dur = vista === 'img' && imgActual ? imgActual.seg : SEGUNDOS_POR_PAGINA;
+      const r = Math.min(1, (now - t0) / (dur*1000));
       $('barra').style.width = (r*100) + '%';
-      if (r >= 1) { pagina++; dibujar(true); t0 = now; }
+      if (r >= 1) { t0 = now; avanzar(); }
     } else { $('barra').style.width = '0'; t0 = now; }
-    requestAnimationFrame(tick);
-  })(t0);
+  }, 250);
 
   refrescar();
   setInterval(refrescar, 60000);
