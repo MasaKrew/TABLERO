@@ -127,10 +127,8 @@
   #pantalla img{display:block;width:100%;height:100%;object-fit:contain;animation:aparece .7s ease both}
   @keyframes aparece{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
   .estatico #pantalla img{animation:none}
-  #pantalla .par{display:flex;gap:1.2vw;height:100%;align-items:stretch}
-  #pantalla .par img{flex:1 1 0px;min-width:0;width:auto;height:100%;object-fit:contain}
-  #pantalla .par img:first-child{object-position:left center}
-  #pantalla .par img:last-child{object-position:right center}
+  #pantalla .par{display:flex;gap:1.2vw;height:100%;align-items:center;justify-content:center}
+  #pantalla .par img{flex:none;width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain}
   #app.con-imagen #grupos{visibility:hidden}
   #app.con-imagen #resumen{display:none}
   #pantalla{position:relative;overflow:hidden}
@@ -394,9 +392,10 @@
     return filas.slice(1).map(f => {
       const l = linkImagen(f[0]);
       const s = parseFloat(String(f[2]||'').replace(',', '.'));
-      const l2 = linkImagen(f[4]);                         // columna E (opcional): segunda imagen, al lado de la primera
+      // columnas E y F (opcionales): segunda y tercera imagen, al lado de la primera
+      const extras = [linkImagen(f[4]), linkImagen(f[5])].filter(Boolean);
       return l && { ...l, titulo: String(f[1]||'').trim(), seg: s > 0 ? Math.max(3, s) : null,   // sin segundos: usa los de ORDEN
-                    on: !/^N/.test(norm(f[3])), url2: l2 ? l2.url : '', respaldo2: l2 ? l2.respaldo : '' };
+                    on: !/^N/.test(norm(f[3])), extras };
     }).filter(p => p && p.on);
   }
 
@@ -706,7 +705,7 @@
 
   function precargar(){
     datos.secciones.filter(s => s.tipo === 'imgs').forEach(s => s.items.forEach(p => {
-      [p.url, p.url2].filter(Boolean).forEach(u => { const i = new Image(); i.src = u; });
+      [p.url, ...(p.extras || []).map(e => e.url)].filter(Boolean).forEach(u => { const i = new Image(); i.src = u; });
     }));
   }
 
@@ -775,8 +774,10 @@
   function pintarImagen(p){
     $('titulo').textContent = p.titulo || 'Información'; ajustarTitulo();
     $('subtitulo').textContent = 'Información para el personal';
-    const url2 = qs.get('img2prueba') || p.url2;           // ?img2prueba=... solo para vistas previas
-    if (url2) { pintarPar(p, url2); return; }
+    const extras = (p.extras || []).slice();
+    if (qs.get('img2prueba')) extras[0] = { url: qs.get('img2prueba'), respaldo: '' };   // solo para vistas previas
+    if (qs.get('img3prueba')) extras[1] = { url: qs.get('img3prueba'), respaldo: '' };
+    if (extras.filter(Boolean).length) { pintarVarias(p, extras.filter(Boolean)); return; }
     const img = new Image();
     img.alt = p.titulo;
     let respaldo = false;
@@ -789,22 +790,38 @@
     abrirPantalla();
   }
 
-  // dos imágenes lado a lado: cada una recibe un ancho proporcional a su forma, así ambas quedan del mismo alto
-  function pintarPar(p, url2){
+  // 2 o 3 imágenes lado a lado: cada una recibe un ancho proporcional a su forma, así todas quedan del mismo alto
+  // Orden en pantalla, de izquierda a derecha: F (IMAGEN 3) · E (IMAGEN 2) · A (IMAGEN)
+  function pintarVarias(p, extras){
     const par = document.createElement('div'); par.className = 'par';
-    let fallas = 0;
-    [[qs.get('imgprueba') || p.url, p.respaldo], [url2, p.respaldo2]].forEach(([u, resp]) => {
+    const lista = [...extras.map(e => [e.url, e.respaldo])].reverse().concat([[qs.get('imgprueba') || p.url, p.respaldo]]);
+    let listas = 0, fallas = 0;
+    const terminado = () => { if (++listas === lista.length) acomodarVarias(); };
+    lista.forEach(([u, resp]) => {
       const img = new Image(); let r = false;
       img.alt = p.titulo;
-      img.onload = () => { img.style.flex = (img.naturalWidth / img.naturalHeight) + ' 1 0px'; };
+      img.onload = terminado;
       img.onerror = () => {
         if (!r && resp) { r = true; img.src = resp; return; }
-        img.remove(); if (++fallas === 2 && par.isConnected) { t0 = performance.now(); avanzar(); }
+        img.remove(); fallas++;
+        if (fallas === lista.length) { if (par.isConnected) { t0 = performance.now(); avanzar(); } } else terminado();
       };
       img.src = u; par.appendChild(img);
     });
     $('pantalla').innerHTML = ''; $('pantalla').appendChild(par);
     abrirPantalla();
+  }
+
+  // todas del mismo alto, lo más grandes posible, juntas y centradas (sin deformar ni recortar)
+  function acomodarVarias(){
+    const par = document.querySelector('#pantalla .par'); if (!par) return;
+    const imgs = [...par.querySelectorAll('img')].filter(i => i.naturalWidth);
+    if (!imgs.length) return;
+    const sep = parseFloat(getComputedStyle(par).columnGap) || 0;
+    const W = par.clientWidth - sep * (imgs.length - 1), H = par.clientHeight;
+    const suma = imgs.reduce((s, i) => s + i.naturalWidth / i.naturalHeight, 0);
+    const alto = Math.min(H, W / suma);
+    imgs.forEach(i => { i.style.height = alto + 'px'; i.style.width = (alto * i.naturalWidth / i.naturalHeight) + 'px'; });
   }
 
   function mostrarSeccion(i, animar){
@@ -914,7 +931,7 @@
   }
   setInterval(() => { if (importantes.length > 1) { iImp++; mostrarImportante(); } }, 8000);
   ponerCinta(AVISOS);
-  window.addEventListener('resize', () => { ajustarTitulo(); if (datos && vista === 'prog') dibujar(false, true); else if (vista === 'img') ajustarCalendario(); });
+  window.addEventListener('resize', () => { ajustarTitulo(); if (datos && vista === 'prog') dibujar(false, true); else if (vista === 'img') { ajustarCalendario(); acomodarVarias(); } });
   if (document.fonts) document.fonts.ready.then(() => { ajustarTitulo(); if (datos && vista === 'prog') dibujar(false, true); else ajustarCalendario(); });   // al cargar las letras, recalcula
   if (document.fonts) document.fonts.addEventListener('loadingdone', () => { ajustarTitulo(); if (datos && vista === 'prog') ajustar(); });
   setInterval(() => { ajustarTitulo(); if (datos && vista === 'prog') ajustar(); }, 5000);
